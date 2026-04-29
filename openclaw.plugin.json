@@ -1,0 +1,126 @@
+{
+  "id": "memory-layer",
+  "name": "Memory Layer 记忆分层",
+  "version": "0.1.0",
+  "description": "Enterprise-grade multi-channel layered memory plugin for multi-user OpenClaw agents",
+  "main": "index.ts",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabledAgents": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "enabledChannels": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "includeGroups": {
+        "type": "boolean"
+      },
+      "baseDir": {
+        "type": "string"
+      },
+      "sharedFilePath": {
+        "type": "string"
+      },
+      "recentHistoryDays": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "maxSharedChars": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxPersonalChars": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxHistoryChars": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxTurnChars": {
+        "type": "integer",
+        "minimum": 200
+      },
+      "maxStoredSharedChars": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxStoredPersonalChars": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxStoredHistoryChars": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "autoCreateFiles": {
+        "type": "boolean"
+      },
+      "allowInlineSaveCommands": {
+        "type": "boolean"
+      },
+      "contextInjectionMode": {
+        "type": "string",
+        "enum": ["always", "new-session", "off"]
+      },
+      "historyInjectionMode": {
+        "type": "string",
+        "enum": ["always", "new-session", "off"]
+      }
+    }
+  },
+  "uiHints": {
+    "enabledAgents": {
+      "label": "Enabled Agents",
+      "help": "Leave empty to enable for all agents."
+    },
+    "enabledChannels": {
+      "label": "Enabled Channels",
+      "help": "Leave empty to enable all supported channels."
+    },
+    "includeGroups": {
+      "label": "Include Group Sessions",
+      "help": "Disabled by default so personal memory stays tied to direct messages."
+    },
+    "baseDir": {
+      "label": "Workspace Memory Folder",
+      "help": "Relative to each agent workspace unless sharedFilePath overrides the shared layer."
+    },
+    "sharedFilePath": {
+      "label": "Shared Memory File",
+      "help": "Optional absolute or workspace-relative path. Default shared memory lives at .memory-layer/shared/memory.md. Use the same absolute path across agents to share one team memory file."
+    },
+    "autoCreateFiles": {
+      "label": "Pre-create Default Memory Files",
+      "help": "When enabled, the plugin creates default shared/personal memory templates up front. When disabled, it skips proactive template creation, but real writes may still create required parent directories or target files."
+    },
+    "maxStoredSharedChars": {
+      "label": "Max Shared File Chars",
+      "help": "Soft cap for the stored shared memory file. Leave 0 to disable trimming."
+    },
+    "maxStoredPersonalChars": {
+      "label": "Max Personal File Chars",
+      "help": "Soft cap for each user's stored personal memory file. Leave 0 to disable trimming."
+    },
+    "maxStoredHistoryChars": {
+      "label": "Max History File Chars",
+      "help": "Soft cap for each user's daily history file. Leave 0 to disable trimming."
+    },
+    "contextInjectionMode": {
+      "label": "Layered Context Injection Mode",
+      "help": "`always` injects shared, personal, notes, and history on every turn. `new-session` injects shared, personal, and notes on the first turn of a new session, but only injects history after automatic archival, not after user-triggered /new or /reset; newly saved shared/personal memory is reinjected once on the next turn. `off` disables layered memory injection."
+    },
+    "historyInjectionMode": {
+      "label": "Deprecated: History Injection Mode",
+      "help": "Deprecated compatibility alias for `contextInjectionMode`. Existing configs may keep working, but new setups should use `contextInjectionMode`."
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "name": "@shyzhen/memory-layer",
+  "version": "0.1.0",
+  "description": "Enterprise-grade multi-channel layered memory plugin for multi-user OpenClaw agents",
+  "main": "index.ts",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShyZhen/memory-layer.git"
+  },
+  "homepage": "https://github.com/ShyZhen/memory-layer",
+  "bugs": {
+    "url": "https://github.com/ShyZhen/memory-layer/issues"
+  },
+  "scripts": {
+    "build": "echo 'No build needed - jiti loads TS at runtime'",
+    "type-check": "echo 'Type check skipped'",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "memory",
+    "layered-memory",
+    "multi-user",
+    "session-isolation",
+    "dingtalk",
+    "telegram",
+    "钉钉",
+    "记忆分层"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "openclaw": "*"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24",
+      "minGatewayVersion": "2026.3.24"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24",
+      "pluginSdkVersion": "2026.3.24"
+    },
+    "installDependencies": false
+  }
+}
