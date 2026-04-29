@@ -13,7 +13,12 @@ For maintenance and design details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Installation
 
-After publishing to ClawHub, others can install it with:
+- publish
+```bash
+clawhub package publish ShyZhen/memory-layer --family code-plugin --name @shyzhen/memory-layer --dry-run
+```
+
+- After publishing to ClawHub, others can install it with:
 
 ```bash
 openclaw plugins install @shyzhen/memory-layer

@@ -12,10 +12,13 @@
 英文版请见 [README-en.md](./README-en.md)。
 维护设计说明请见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
-## 安装
+## 发布 && 安装
 
-发布到 ClawHub 后，其他人可以直接通过命令安装：
-
+- 发布
+```bash
+clawhub package publish ShyZhen/memory-layer --family code-plugin --name @shyzhen/memory-layer --dry-run
+```
+- 发布到 ClawHub 后，其他人可以直接通过命令安装：
 ```bash
 openclaw plugins install @shyzhen/memory-layer
 ```
