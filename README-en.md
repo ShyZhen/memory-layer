@@ -15,12 +15,12 @@ For maintenance and design details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 - ClawHub dry run
 ```bash
-clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --version 0.5.0 --changelog "Release 0.5.0" --dry-run
+clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --dry-run
 ```
 
 - ClawHub publish
 ```bash
-clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --version 0.5.0 --changelog "Release 0.5.0"
+clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层"
 ```
 
 - publish to npm
