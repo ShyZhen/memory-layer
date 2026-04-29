@@ -16,7 +16,13 @@
 
 - 发布
 ```bash
-clawhub package publish ShyZhen/memory-layer --family code-plugin --name memory-layer
+clawhub package publish ShyZhen/memory-layer --family code-plugin --name @shyzhen/memory-layer --dry-run
+```
+- npm 发布
+```bash
+cd memory-layer
+npm pack
+npm publish --access public
 ```
 - 发布到 ClawHub 后，其他人可以直接通过命令安装：
 ```bash

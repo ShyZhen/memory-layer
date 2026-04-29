@@ -15,7 +15,14 @@ For maintenance and design details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 - publish
 ```bash
-clawhub package publish ShyZhen/memory-layer --family code-plugin --name memory-layer
+clawhub package publish ShyZhen/memory-layer --family code-plugin --name @shyzhen/memory-layer --dry-run
+```
+
+- publish to npm
+```bash
+cd memory-layer
+npm pack
+npm publish --access public
 ```
 
 - After publishing to ClawHub, others can install it with:
