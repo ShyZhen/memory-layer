@@ -1,8 +1,8 @@
 {
   "id": "memory-layer",
   "name": "Memory Layer 记忆分层",
-  "version": "0.5.0",
-  "description": "Enterprise-grade multi-channel layered memory plugin for multi-user OpenClaw agents",
+  "version": "0.6.0",
+  "description": "专为企业级多用户 OpenClaw 智能体打造的多通道分层记忆插件。",
   "main": "index.ts",
   "configSchema": {
     "type": "object",
