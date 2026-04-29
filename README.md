@@ -16,11 +16,11 @@
 
 - ClawHub 发布前检查
 ```bash
-clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --version 0.5.0 --changelog "Release 0.5.0" --dry-run
+clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --dry-run
 ```
 - ClawHub 正式发布
 ```bash
-clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --version 0.5.0 --changelog "Release 0.5.0"
+clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层"
 ```
 - npm 发布
 ```bash
