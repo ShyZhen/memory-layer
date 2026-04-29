@@ -11,6 +11,7 @@ import {
   DEFAULT_CONTEXT_TRACKING_TTL_MS,
   getRedirectedLegacyMemoryPath,
   isLegacyMemoryPath,
+  isManualSessionResetEvent,
   joinRecentDatedContents,
   looksLikeSyntheticSessionResetPrompt,
   markContextInjectionReset,
@@ -153,6 +154,14 @@ test("manual reset reinjects layered context without bringing history back", () 
   );
 });
 
+test("before_reset manual reasons are recognized structurally", () => {
+  assert.equal(isManualSessionResetEvent({ reason: "new" }), true);
+  assert.equal(isManualSessionResetEvent({ reason: " reset " }), true);
+  assert.equal(isManualSessionResetEvent({ reason: "daily" }), false);
+  assert.equal(isManualSessionResetEvent({}), false);
+  assert.equal(isManualSessionResetEvent(null), false);
+});
+
 test("memory save reinjects layered context without history on next turn", () => {
   const injectedTokens = new Map();
   const pendingKeys = new Map();
@@ -199,6 +208,22 @@ test("synthetic /new prompt suppresses recent history on first prompt build", ()
   );
 });
 
+test("newer synthetic /reset prompt wording is still recognized", () => {
+  const prompt = [
+    "A fresh session was started via /new or /reset.",
+    "Execute your Session Startup sequence now - read the required files before responding to the user.",
+  ].join("\n");
+
+  assert.equal(looksLikeSyntheticSessionResetPrompt(prompt), true);
+  assert.deepEqual(
+    adjustLayeredContextInjectionForPrompt("new-session", prompt, {
+      includeLayeredContext: true,
+      includeRecentHistory: true,
+    }),
+    { includeLayeredContext: true, includeRecentHistory: false },
+  );
+});
+
 test("synthetic /new prompt is not archived into recent history", () => {
   const prompt = [
     "A new session was started via /new or /reset.",
@@ -207,6 +232,14 @@ test("synthetic /new prompt is not archived into recent history", () => {
 
   assert.equal(shouldArchiveRecentHistoryTurn(prompt), false);
   assert.equal(shouldArchiveRecentHistoryTurn("你好啊"), true);
+});
+
+test("standalone /new and /reset commands are treated as reset turns", () => {
+  assert.equal(looksLikeSyntheticSessionResetPrompt("/new"), true);
+  assert.equal(looksLikeSyntheticSessionResetPrompt("/new sonnet"), true);
+  assert.equal(looksLikeSyntheticSessionResetPrompt("/reset"), true);
+  assert.equal(shouldArchiveRecentHistoryTurn("/new"), false);
+  assert.equal(shouldArchiveRecentHistoryTurn("/reset"), false);
 });
 
 test("recent dated aggregation truncates from the end to keep newest content", () => {
