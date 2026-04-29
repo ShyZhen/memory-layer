@@ -13,7 +13,7 @@
 维护设计说明请见 [ARCHITECTURE.md](./ARCHITECTURE.md)。
 
 ## 发布 && 安装
-
+### 发布
 - ClawHub 发布前检查
 ```bash
 clawhub package publish ShyZhen/memory-layer@main --family code-plugin --name @shyzhen/memory-layer --display-name "Memory Layer 记忆分层" --dry-run
@@ -28,9 +28,19 @@ cd memory-layer
 npm pack
 npm publish --access public
 ```
-- 发布到 ClawHub 后，其他人可以直接通过命令安装：
+
+### 安装
+- 安装方式1：直接从 ClawHub 安装：
+
 ```bash
 openclaw plugins install @shyzhen/memory-layer
+```
+- 安装方式2：先从 npm 打包，再从本地 tarball 安装
+> 原因：当前部分 OpenClaw / ClawHub 运行环境在安装 scoped 包 `@shyzhen/memory-layer` 时，可能会因为临时 zip 路径处理问题报 `ENOENT`。先 `npm pack` 再本地安装可以稳定绕过这个问题。
+
+```bash
+npm pack @shyzhen/memory-layer
+openclaw plugins install ./shyzhen-memory-layer-0.7.0.tgz
 ```
 
 ## 核心能力

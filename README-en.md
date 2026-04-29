@@ -11,7 +11,9 @@ By default, it is channel-agnostic and works from OpenClaw session keys, making 
 For the Chinese version, see [README.md](./README.md).
 For maintenance and design details, see [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-## Installation
+## Publish && Install
+
+### Publish
 
 - ClawHub dry run
 ```bash
@@ -30,10 +32,20 @@ npm pack
 npm publish --access public
 ```
 
-- After publishing to ClawHub, others can install it with:
+### Install
+
+- Install method 1: install directly from ClawHub
 
 ```bash
 openclaw plugins install @shyzhen/memory-layer
+```
+
+- Install method 2: pack from npm first, then install from the local tarball
+> Reason: some OpenClaw / ClawHub environments currently hit an `ENOENT` temp zip path issue when installing the scoped package `@shyzhen/memory-layer`. `npm pack` plus local install is a stable workaround.
+
+```bash
+npm pack @shyzhen/memory-layer
+openclaw plugins install ./shyzhen-memory-layer-0.7.0.tgz
 ```
 
 ## Core Capabilities
