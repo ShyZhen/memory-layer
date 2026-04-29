@@ -91,6 +91,7 @@ openclaw plugins install ./shyzhen-memory-layer-0.7.0.tgz
 - 当 `contextInjectionMode = "new-session"` 时，共享记忆、个人记忆和兼容 `notes/` 会在新 session 首轮注入
 - 此时 `history/` 只会在**自动归档后新开的 session** 中注入，不会在用户主动 `/new`、`/reset` 后带回，尊重用户的命令操作
 - 插件不会把 `/new`、`/reset` 产生的 synthetic 会话启动提示归档进 `history/`
+- 对于支持插件 `before_reset` hook 的较新 OpenClaw 版本，插件会优先根据结构化 `reason: "new" | "reset"` 识别手动 reset；对于较老版本，则继续使用 reset 启动提示与独立 `/new`、`/reset` 文本作为兜底兼容
 
 对于插件接管的私聊会话，插件还会拦截并重写旧版 memory 文件读写，确保新的个人记忆不会再写进共享的旧版 `MEMORY.md` 中。
 对于插件自己维护的 `shared/memory.md`、个人 `memory.md`、每日 `history`，还会按字符上限做软裁剪，避免文件无限增长。
@@ -198,6 +199,7 @@ openclaw plugins install ./shyzhen-memory-layer-0.7.0.tgz
 
 - `history/` 记录的是当前用户最近一轮原始入站消息与本轮助手回复，用来提供短期连续性上下文
 - 当 `contextInjectionMode = "new-session"` 时，共享记忆、个人记忆和兼容 notes 会在新 session 首轮注入；`history/` 只会在自动归档后新开的 session 中注入，不会在用户主动 `/new`、`/reset` 后带回
+- 在支持 `before_reset` 的新版本 OpenClaw 上，插件会直接根据 reset hook 事件判断“这是一次手动 `/new` / `/reset`”；在旧版本上，则回退到识别 OpenClaw 注入的 reset 启动提示或独立命令文本
 - 如果当前 session 刚写入了共享/个人记忆，下一轮还会补注入一次，避免刚保存的记忆暂时不可见
 - `notes/` 不是每次对话都会写入
 - 只有当旧版工具去读写 `memory/YYYY-MM-DD.md` 或 `memory/YYYY-MM-DD-*.md` 时，插件才会把这些路径重定向到当前用户自己的 `notes/`
@@ -283,6 +285,7 @@ openclaw plugins install ./shyzhen-memory-layer-0.7.0.tgz
 - 对于插件接管的私聊会话，不建议再依赖旧版 `memory_search` 和 `memory_get`
 - OpenClaw 原生 memory 的自动 flush / 搜索索引针对的是根目录 `MEMORY.md` 和 `memory/*.md`，不会直接接管 `.memory-layer/**`
 - 插件启动时会对 `session.dmScope = "main"` 和已启用的 `session-memory` 输出 warning，帮助排查“为什么没有按用户隔离”
+- 如果你的 OpenClaw 版本已经支持 `before_reset` 插件 hook，推荐直接使用当前版本插件；它会优先走结构化 reset 识别。即使线上仍有旧版本节点，当前插件也保留了提示词兜底，不需要额外切换配置
 
 ## 说明
 

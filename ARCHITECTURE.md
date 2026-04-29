@@ -45,6 +45,7 @@
 - `shared/memory.md`、当前用户 `memory.md` 和兼容 `notes/` 采用 `new-session` 语义
 - `history/` 采用 `archive-only` 语义
 - 尊重用户的操作：用户主动执行 `/new`、`/reset` 时，会重新注入 shared/personal/notes，但不会带回 `history/`
+- 对于支持插件 `before_reset` hook 的较新 OpenClaw 版本，手动 `/new`、`/reset` 优先依赖结构化 reset 事件识别；对于较老版本，则回退到识别 reset 启动提示或独立命令文本
 - 只有自动归档后新开的 session，才会恢复 `history/`
 - 如果当前 session 刚写入了 shared/personal memory，下一轮会补注入一次 layered context，但不带 `history/`
 
@@ -81,16 +82,18 @@ flowchart TD
 
 ## 当前使用的 Hook
 
-插件目前使用四个 Hook：
+插件目前使用五个 Hook：
 
 - `before_prompt_build`
   把分层记忆上下文注入到 prompt。
+- `before_reset`
+  在 OpenClaw 暴露结构化 reset 事件时，优先把手动 `/new`、`/reset` 标记为“下一轮重注入 layered context，但不带 history”。
 - `before_tool_call`
   重写旧版基于文件的记忆读写，并阻止无法按用户隔离的内置 memory 工具。
 - `agent_end`
   记录当前用户近期历史，并处理显式保存命令。
 - `message_received` / `message_sent`
-  优先捕获原始入站与出站消息，避免把注入后的分层上下文重新写回 `history/`。
+  优先捕获原始入站与出站消息，并在旧版 OpenClaw 上继续通过 reset 提示词 / 独立命令文本兜底识别手动 reset，避免把注入后的分层上下文重新写回 `history/`。
 
 这意味着该插件本质上是一个 `hook-only` 插件，而不是注册 provider/channel/tool capability 的插件。
 
@@ -148,6 +151,11 @@ OpenClaw 的旧版 memory 工具是围绕全局或共享记忆设计的：
 ## 运行时前置要求
 
 为了避免旧逻辑绕过插件继续写入共享路径，强烈建议禁用内置的 `session-memory`。当前实现会在插件启动时对该冲突输出 warning，方便尽早发现配置问题。
+
+补充说明：
+
+- 如果运行环境已经支持插件 `before_reset` hook，插件会优先使用结构化 reset 事件判断手动 `/new`、`/reset`
+- 如果运行环境仍是较老版本，插件会自动回退到提示词 / 独立命令文本识别，不需要拆分配置
 
 当前本地配置已在以下文件中关闭：
 

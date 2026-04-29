@@ -254,15 +254,24 @@ export function joinRecentDatedContents(buffers, maxChars) {
 }
 
 export function looksLikeSyntheticSessionResetPrompt(text) {
+  const normalized = typeof text === "string" ? extractUserTextAfterMetadata(text).trim() : "";
+  if (!normalized) return false;
+  if (looksLikeStandaloneSessionResetCommand(normalized)) return true;
+
   return (
-    typeof text === "string"
-    && text.includes("A new session was started via /new or /reset.")
-    && text.includes("Run your Session Startup sequence")
+    (normalized.includes("/new") || normalized.includes("/reset"))
+    && /\b(?:run|execute)\s+your\s+session\s+startup\s+sequence\b/i.test(normalized)
+    && /\b(?:new|fresh)\s+session\b/i.test(normalized)
   );
 }
 
 export function shouldArchiveRecentHistoryTurn(rawUserPrompt) {
   return !looksLikeSyntheticSessionResetPrompt(rawUserPrompt);
+}
+
+export function isManualSessionResetEvent(event) {
+  const reason = readSessionResetReason(event);
+  return reason === "new" || reason === "reset";
 }
 
 export function stripInjectedLayeredContext(text) {
@@ -328,6 +337,15 @@ function extractUserTextAfterMetadata(text) {
     /Conversation info \(untrusted metadata\):\n```json[\s\S]*?```\n\nSender \(untrusted metadata\):\n```json[\s\S]*?```\n\n?([\s\S]*)$/,
   );
   return match?.[1]?.trim() ?? text.trim();
+}
+
+function looksLikeStandaloneSessionResetCommand(text) {
+  return /^\/(?:new|reset)(?:\s+[^\r\n]+)?$/i.test(text.trim());
+}
+
+function readSessionResetReason(event) {
+  if (!isRecord(event)) return undefined;
+  return typeof event.reason === "string" ? event.reason.trim().toLowerCase() : undefined;
 }
 
 function truncateFromEnd(value, maxChars) {

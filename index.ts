@@ -13,6 +13,7 @@ import {
   DEFAULT_CONTEXT_TRACKING_TTL_MS,
   getRedirectedLegacyMemoryPath as getRedirectedLegacyMemoryPathCore,
   isLegacyMemoryPath as isLegacyMemoryPathCore,
+  isManualSessionResetEvent,
   joinRecentDatedContents,
   looksLikeSyntheticSessionResetPrompt,
   markContextInjectionReset,
@@ -86,6 +87,7 @@ type AgentEndEvent = {
   error?: string;
 };
 
+type BeforeResetHookContext = AgentHookContext;
 type MessageHookContext = AgentHookContext;
 
 type PendingTurn = {
@@ -116,6 +118,7 @@ const DEFAULT_CONFIG: MemoryLayerConfig = {
 };
 
 const pendingTurns = new Map<string, PendingTurn>();
+const pendingResetTurns = new Map<string, number>();
 const injectedContextTokens = new Map<string, number>();
 const pendingContextInjectionKeys = new Map<string, PendingContextInjectionState>();
 const fileWriteQueues = new Map<string, Promise<void>>();
@@ -163,12 +166,22 @@ export default function register(api: OpenClawPluginApi) {
     const hookMessageText = extractHookMessageText(event);
     if (looksLikeSyntheticSessionResetPrompt(hookMessageText)) {
       markContextInjectionReset(scopePaths.sessionKey, pendingContextInjectionKeys);
+      rememberPendingResetTurn(scopePaths.sessionKey);
     }
 
     const rawUserText = normalizeRawInboundUserText(hookMessageText);
     if (!rawUserText) return;
 
     rememberPendingTurn(scopePaths.sessionKey, { userText: rawUserText });
+  });
+
+  api.on("before_reset", async (event, ctx) => {
+    const hookCtx = ctx as BeforeResetHookContext;
+    if (!hookCtx.sessionKey) return;
+    if (!isManualSessionResetEvent(event)) return;
+
+    markContextInjectionReset(hookCtx.sessionKey, pendingContextInjectionKeys);
+    rememberPendingResetTurn(hookCtx.sessionKey);
   });
 
   api.on("message_sent", async (event, ctx) => {
@@ -224,6 +237,7 @@ export default function register(api: OpenClawPluginApi) {
       }
     }
 
+    if (consumePendingResetTurn(scopePaths.sessionKey)) return;
     if (!shouldArchiveRecentHistoryTurn(latestUserRoleText)) return;
     if (!userTextForHistory && !lastAssistantText) return;
 
@@ -896,10 +910,7 @@ function sanitizeHistoryContent(content: string): string {
 function looksLikeInjectedHistoryEntry(section: string): boolean {
   return (
     section.includes("# Layered Memory Context")
-    || (
-      section.includes("A new session was started via /new or /reset.")
-      && section.includes("Run your Session Startup sequence")
-    )
+    || looksLikeSyntheticSessionResetPrompt(section)
   );
 }
 
@@ -927,6 +938,27 @@ function prunePendingTurns(): void {
   for (const [sessionKey, entry] of pendingTurns.entries()) {
     if (entry.updatedAt < expiresBefore) {
       pendingTurns.delete(sessionKey);
+    }
+  }
+}
+
+function rememberPendingResetTurn(sessionKey: string): void {
+  prunePendingResetTurns();
+  pendingResetTurns.set(sessionKey, Date.now());
+}
+
+function consumePendingResetTurn(sessionKey: string): boolean {
+  prunePendingResetTurns();
+  const exists = pendingResetTurns.has(sessionKey);
+  pendingResetTurns.delete(sessionKey);
+  return exists;
+}
+
+function prunePendingResetTurns(): void {
+  const expiresBefore = Date.now() - 60 * 60 * 1000;
+  for (const [sessionKey, seenAt] of pendingResetTurns.entries()) {
+    if (seenAt < expiresBefore) {
+      pendingResetTurns.delete(sessionKey);
     }
   }
 }
