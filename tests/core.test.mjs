@@ -87,7 +87,17 @@ test("collectStartupWarnings stays quiet for safe config", () => {
         },
       },
     },
-  });
+    plugins: {
+      entries: {
+        "memory-layer": {
+          hooks: {
+            allowPromptInjection: true,
+            allowConversationAccess: true,
+          },
+        },
+      },
+    },
+  }, "2026.4.29");
 
   assert.deepEqual(warnings, []);
 });
@@ -105,6 +115,82 @@ test("collectStartupWarnings still warns when session-memory hook is not explici
 
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /session-memory/i);
+});
+
+test("collectStartupWarnings warns when hook policy blocks layered memory features on new versions", () => {
+  const warnings = collectStartupWarnings({
+    session: { dmScope: "per-channel-peer" },
+    hooks: {
+      internal: {
+        enabled: true,
+        entries: {
+          "session-memory": { enabled: false },
+        },
+      },
+    },
+    plugins: {
+      entries: {
+        "memory-layer": {
+          hooks: {
+            allowPromptInjection: false,
+            allowConversationAccess: false,
+          },
+        },
+      },
+    },
+  }, "2026.4.29");
+
+  assert.equal(warnings.length, 2);
+  assert.match(warnings[0], /allowPromptInjection/i);
+  assert.match(warnings[1], /allowConversationAccess/i);
+});
+
+test("collectStartupWarnings does not require allowConversationAccess on pre-2026.4.23 versions", () => {
+  const warnings = collectStartupWarnings({
+    session: { dmScope: "per-channel-peer" },
+    hooks: {
+      internal: {
+        enabled: true,
+        entries: {
+          "session-memory": { enabled: false },
+        },
+      },
+    },
+    plugins: {
+      entries: {
+        "memory-layer": {},
+      },
+    },
+  }, "2026.4.15");
+
+  assert.deepEqual(warnings, []);
+});
+
+test("collectStartupWarnings flags 2026.4.23 as a transitional allowConversationAccess release", () => {
+  const warnings = collectStartupWarnings({
+    session: { dmScope: "per-channel-peer" },
+    hooks: {
+      internal: {
+        enabled: true,
+        entries: {
+          "session-memory": { enabled: false },
+        },
+      },
+    },
+    plugins: {
+      entries: {
+        "memory-layer": {
+          hooks: {
+            allowPromptInjection: true,
+          },
+        },
+      },
+    },
+  }, "2026.4.23");
+
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /transitional release/i);
+  assert.match(warnings[0], /2026\.4\.24\+/i);
 });
 
 test("enabledChannels rejects channel-less DM session keys", () => {
