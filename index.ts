@@ -101,6 +101,22 @@ type PendingContextInjectionState = {
   includeRecentHistory: boolean;
 };
 
+type LayeredSearchChunk = {
+  path: string;
+  text: string;
+  startLine: number;
+  endLine: number;
+};
+
+type LayeredSearchResult = {
+  path: string;
+  snippet: string;
+  startLine: number;
+  endLine: number;
+  score: number;
+  citation: string;
+};
+
 const DEFAULT_CONFIG: MemoryLayerConfig = {
   includeGroups: false,
   baseDir: ".memory-layer",
@@ -126,6 +142,8 @@ const fileWriteQueues = new Map<string, Promise<void>>();
 export default function register(api: OpenClawPluginApi) {
   const config = normalizeConfig(api.pluginConfig);
   emitStartupDiagnostics(api);
+  api.registerTool((toolCtx) => createLayeredMemorySearchTool(api, config, toolCtx));
+  api.registerTool((toolCtx) => createLayeredMemoryGetTool(api, config, toolCtx));
 
   api.on("before_prompt_build", async (event, ctx) => {
     const scopePaths = resolveScopePaths(api, config, ctx);
@@ -484,7 +502,7 @@ async function rewriteLegacyMemoryToolCall(
   if (event.toolName === "memory_search" || event.toolName === "memory_get") {
     return {
       block: true,
-      blockReason: `The memory-layer plugin manages recall for this session. Do not use ${event.toolName}; rely on injected layered memory context or read .memory-layer files directly.`,
+      blockReason: `The memory-layer plugin manages recall for this session. Do not use ${event.toolName}; use layered_memory_search or layered_memory_get instead.`,
     };
   }
 
@@ -507,6 +525,347 @@ async function rewriteLegacyMemoryToolCall(
       ...event.params,
       path: redirectedPath,
     },
+  };
+}
+
+function createLayeredMemorySearchTool(
+  api: OpenClawPluginApi,
+  config: MemoryLayerConfig,
+  toolCtx: AgentHookContext,
+) {
+  return {
+    name: "layered_memory_search",
+    description: "Search the current session's layered memory scope (shared, personal, notes, history) and return matching snippets with file paths and line ranges.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string" },
+        maxResults: { type: "number" },
+        minScore: { type: "number" },
+      },
+      required: ["query"],
+    },
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
+      const scopePaths = resolveScopePaths(api, config, toolCtx);
+      if (!scopePaths) {
+        return toJsonToolResult({
+          results: [],
+          disabled: true,
+          error: "layered memory is unavailable for the current session",
+        });
+      }
+
+      const query = typeof params.query === "string" ? params.query.trim() : "";
+      const maxResults = typeof params.maxResults === "number" && Number.isFinite(params.maxResults)
+        ? Math.max(1, Math.min(20, Math.floor(params.maxResults)))
+        : 5;
+      const minScore = typeof params.minScore === "number" && Number.isFinite(params.minScore)
+        ? params.minScore
+        : 0;
+
+      if (!query) {
+        return toJsonToolResult({
+          results: [],
+          disabled: true,
+          error: "query is required",
+        });
+      }
+
+      await ensureScopeFiles(scopePaths, config);
+      const chunks = await collectLayeredSearchChunks(scopePaths);
+      const results = rankLayeredSearchResults(scopePaths, chunks, query, maxResults, minScore);
+
+      return toJsonToolResult({
+        results,
+        provider: "memory-layer",
+        citations: "auto",
+        mode: "layered-fts",
+      });
+    },
+  };
+}
+
+function createLayeredMemoryGetTool(
+  api: OpenClawPluginApi,
+  config: MemoryLayerConfig,
+  toolCtx: AgentHookContext,
+) {
+  return {
+    name: "layered_memory_get",
+    description: "Read a layered memory file for the current session with optional line slicing.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        path: { type: "string" },
+        from: { type: "number" },
+        lines: { type: "number" },
+      },
+      required: ["path"],
+    },
+    execute: async (_toolCallId: string, params: Record<string, unknown>) => {
+      const scopePaths = resolveScopePaths(api, config, toolCtx);
+      if (!scopePaths) {
+        return toJsonToolResult({
+          path: typeof params.path === "string" ? params.path : "",
+          text: "",
+          disabled: true,
+          error: "layered memory is unavailable for the current session",
+        });
+      }
+
+      await ensureScopeFiles(scopePaths, config);
+      const requestedPath = typeof params.path === "string" ? params.path.trim() : "";
+      const from = typeof params.from === "number" && Number.isFinite(params.from)
+        ? Math.max(1, Math.floor(params.from))
+        : undefined;
+      const lines = typeof params.lines === "number" && Number.isFinite(params.lines)
+        ? Math.max(1, Math.floor(params.lines))
+        : undefined;
+
+      if (!requestedPath) {
+        return toJsonToolResult({
+          path: requestedPath,
+          text: "",
+          disabled: true,
+          error: "path is required",
+        });
+      }
+
+      const resolvedPath = resolveLayeredMemoryGetPath(scopePaths, requestedPath);
+      if (!resolvedPath) {
+        return toJsonToolResult({
+          path: requestedPath,
+          text: "",
+          disabled: true,
+          error: "path is outside the current layered memory scope",
+        });
+      }
+
+      const text = await readSlicedFile(resolvedPath, from, lines);
+      return toJsonToolResult({
+        path: toDisplayPath(scopePaths.workspaceDir, resolvedPath),
+        text,
+      });
+    },
+  };
+}
+
+async function collectLayeredSearchChunks(scopePaths: ScopePaths): Promise<LayeredSearchChunk[]> {
+  const files = [
+    scopePaths.sharedFile,
+    scopePaths.userMemoryFile,
+    ...await listMarkdownFilesRecursive(scopePaths.notesDir),
+    ...await listMarkdownFilesRecursive(scopePaths.historyDir),
+  ];
+
+  const chunks: LayeredSearchChunk[] = [];
+  for (const filePath of files) {
+    const content = await safeRead(filePath);
+    if (!content.trim()) continue;
+    chunks.push(...splitFileIntoSearchChunks(
+      toDisplayPath(scopePaths.workspaceDir, filePath),
+      content,
+    ));
+  }
+  return chunks;
+}
+
+function rankLayeredSearchResults(
+  scopePaths: ScopePaths,
+  chunks: LayeredSearchChunk[],
+  query: string,
+  maxResults: number,
+  minScore: number,
+): LayeredSearchResult[] {
+  const normalizedQuery = normalizeSearchText(query);
+  const terms = buildSearchTerms(query);
+
+  return chunks
+    .map((chunk) => {
+      const score = scoreSearchChunk(chunk.text, normalizedQuery, terms);
+      return score > 0
+        ? {
+            path: chunk.path,
+            snippet: `${chunk.text.trim()}\n\nSource: ${formatLayeredCitation(chunk.path, chunk.startLine, chunk.endLine)}`,
+            startLine: chunk.startLine,
+            endLine: chunk.endLine,
+            score,
+            citation: formatLayeredCitation(chunk.path, chunk.startLine, chunk.endLine),
+          }
+        : null;
+    })
+    .filter((result): result is LayeredSearchResult => Boolean(result) && result.score >= minScore)
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      if (left.path !== right.path) return left.path.localeCompare(right.path);
+      return left.startLine - right.startLine;
+    })
+    .slice(0, maxResults);
+}
+
+function splitFileIntoSearchChunks(displayPath: string, content: string): LayeredSearchChunk[] {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const chunks: LayeredSearchChunk[] = [];
+  let buffer: string[] = [];
+  let startLine = 1;
+
+  const flush = (endLine: number) => {
+    const text = buffer.join("\n").trim();
+    if (!text) return;
+    chunks.push({
+      path: displayPath,
+      text: truncate(text, 900),
+      startLine,
+      endLine,
+    });
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    const isBoundary = trimmed === "" || /^#{1,3}\s+/.test(trimmed);
+    if (isBoundary && buffer.length > 0) {
+      flush(index);
+      buffer = [];
+    }
+
+    if (trimmed === "") {
+      startLine = index + 2;
+      continue;
+    }
+
+    if (buffer.length === 0) {
+      startLine = index + 1;
+    }
+    buffer.push(line);
+
+    if (buffer.length >= 24 || buffer.join("\n").length >= 1200) {
+      flush(index + 1);
+      buffer = [];
+      startLine = index + 2;
+    }
+  }
+
+  if (buffer.length > 0) {
+    flush(lines.length);
+  }
+
+  return chunks;
+}
+
+function buildSearchTerms(query: string): string[] {
+  const normalized = normalizeSearchText(query);
+  const parts = normalized
+    .split(/[\s,.;:!?()[\]{}"'\u3000\uff0c\u3002\uff1a\uff1b\uff01\uff1f]+/u)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
+  return Array.from(new Set([normalized, ...parts].filter(Boolean)));
+}
+
+function scoreSearchChunk(text: string, normalizedQuery: string, terms: string[]): number {
+  const haystack = normalizeSearchText(text);
+  if (!haystack) return 0;
+
+  let score = 0;
+  if (normalizedQuery && haystack.includes(normalizedQuery)) {
+    score += 1;
+  }
+
+  const matchedTerms = terms.filter((term) => haystack.includes(term));
+  if (matchedTerms.length === 0 && score === 0) {
+    return 0;
+  }
+
+  score += matchedTerms.length / Math.max(terms.length, 1);
+  return Math.min(1.99, score);
+}
+
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function formatLayeredCitation(filePath: string, startLine: number, endLine: number): string {
+  return startLine === endLine
+    ? `${filePath}#L${startLine}`
+    : `${filePath}#L${startLine}-L${endLine}`;
+}
+
+async function listMarkdownFilesRecursive(dirPath: string): Promise<string[]> {
+  const entries = await safeReadDir(dirPath);
+  const files: string[] = [];
+  for (const entry of entries) {
+    const filePath = path.join(dirPath, entry);
+    try {
+      const entryStat = await stat(filePath);
+      if (entryStat.isDirectory()) {
+        files.push(...await listMarkdownFilesRecursive(filePath));
+      } else if (entryStat.isFile() && entry.toLowerCase().endsWith(".md")) {
+        files.push(filePath);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return files.sort((left, right) => left.localeCompare(right));
+}
+
+function resolveLayeredMemoryGetPath(scopePaths: ScopePaths, requestedPath: string): string | null {
+  const legacyRedirected = isLegacyMemoryPath(scopePaths.workspaceDir, requestedPath)
+    ? getRedirectedLegacyMemoryPath(scopePaths, requestedPath)
+    : null;
+  const candidate = legacyRedirected
+    ?? (path.isAbsolute(requestedPath)
+      ? requestedPath
+      : path.resolve(scopePaths.workspaceDir, requestedPath));
+
+  return isPathWithinLayeredScope(scopePaths, candidate) ? candidate : null;
+}
+
+function isPathWithinLayeredScope(scopePaths: ScopePaths, candidatePath: string): boolean {
+  const target = normalizeForComparison(candidatePath);
+  const exactMatches = new Set([
+    normalizeForComparison(scopePaths.sharedFile),
+    normalizeForComparison(scopePaths.userMemoryFile),
+  ]);
+  if (exactMatches.has(target)) return true;
+
+  return [
+    normalizeForComparison(scopePaths.notesDir) + path.sep,
+    normalizeForComparison(scopePaths.historyDir) + path.sep,
+  ].some((prefix) => target.startsWith(prefix));
+}
+
+async function readSlicedFile(filePath: string, from?: number, lines?: number): Promise<string> {
+  const content = await safeRead(filePath);
+  if (!content) return "";
+  if (!from && !lines) return content;
+
+  const fileLines = content.replace(/\r\n/g, "\n").split("\n");
+  const startIndex = Math.max(0, (from ?? 1) - 1);
+  const selected = typeof lines === "number"
+    ? fileLines.slice(startIndex, startIndex + lines)
+    : fileLines.slice(startIndex);
+  return selected.join("\n");
+}
+
+function toDisplayPath(workspaceDir: string, filePath: string): string {
+  const relative = path.relative(workspaceDir, filePath);
+  if (relative && !relative.startsWith("..") && !path.isAbsolute(relative)) {
+    return relative.replace(/\\/g, "/");
+  }
+  return filePath.replace(/\\/g, "/");
+}
+
+function toJsonToolResult(value: unknown): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(value, null, 2),
+      },
+    ],
   };
 }
 
@@ -1024,7 +1383,8 @@ function isRecord(value: unknown): value is Record<string, any> {
 }
 
 function emitStartupDiagnostics(api: OpenClawPluginApi): void {
-  for (const warning of collectStartupWarnings(api.config)) {
+  const runtimeVersion = typeof api.runtime?.version === "string" ? api.runtime.version : undefined;
+  for (const warning of collectStartupWarnings(api.config, runtimeVersion)) {
     console.warn(`[memory-layer] ${warning}`);
   }
 }

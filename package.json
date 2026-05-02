@@ -1,7 +1,7 @@
 {
   "name": "@shyzhen/memory-layer",
-  "version": "0.8.0",
-  "description": "专为企业级多用户 OpenClaw 智能体打造的多通道分层记忆插件。",
+  "version": "0.9.0",
+  "description": "专为企业级多用户 OpenClaw 智能体打造的多通道分层记忆插件,记忆数据隔离,重置会话不再丢失上下文。",
   "main": "index.ts",
   "type": "module",
   "repository": {

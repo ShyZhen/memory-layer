@@ -108,9 +108,10 @@ OpenClaw 的旧版 memory 工具是围绕全局或共享记忆设计的：
 
 因此当前设计明确规定：
 
-- 屏蔽 `memory_search`
-- 屏蔽 `memory_get`
+- 屏蔽旧版 `memory_search`
+- 屏蔽旧版 `memory_get`
 - 正常召回依赖 prompt 中注入的分层记忆上下文
+- 在较新的 OpenClaw 版本里，优先使用插件提供的 `layered_memory_search` / `layered_memory_get`
 - 如确有必要，允许直接读取 `.memory-layer/...` 文件
 
 这是隔离策略的一部分，不是 bug。
@@ -154,6 +155,9 @@ OpenClaw 的旧版 memory 工具是围绕全局或共享记忆设计的：
 
 补充说明：
 
+- 在 OpenClaw 4.23+ 上，建议对当前插件显式开启：
+  - `plugins.entries.memory-layer.hooks.allowPromptInjection = true`
+  - `plugins.entries.memory-layer.hooks.allowConversationAccess = true`
 - 如果运行环境已经支持插件 `before_reset` hook，插件会优先使用结构化 reset 事件判断手动 `/new`、`/reset`
 - 如果运行环境仍是较老版本，插件会自动回退到提示词 / 独立命令文本识别，不需要拆分配置
 

@@ -280,11 +280,36 @@ openclaw plugins install ./shyzhen-memory-layer-0.7.0.tgz
 ## 部署与兼容建议
 
 - 强烈建议禁用内置的 `session-memory` hook，避免旧逻辑继续把个人记忆写回共享路径
+- `2026.4.15` 这类旧版本可以继续使用本插件，本次更新不会要求它们必须增加新的 hook 白名单配置
+- `2026.4.22` 及更早版本：不需要配置 `plugins.entries.memory-layer.hooks.allowConversationAccess`
+- `2026.4.23`：这是过渡版本，运行时已经开始限制 conversation-access hooks，但配置校验对 `allowConversationAccess` 的支持还不完整；如果遇到相关 hook 被拦截，建议直接升级到 `2026.4.24+`
+- `2026.4.24+`：建议为 `memory-layer` 显式配置：
+  - `plugins.entries.memory-layer.hooks.allowPromptInjection = true`
+  - `plugins.entries.memory-layer.hooks.allowConversationAccess = true`
 - 旧版根目录 `MEMORY.md` 可以继续保留，作为兼容性的共享上下文
 - 没有必要把 `sharedFilePath` 指向根目录 `MEMORY.md`
+- 对于插件接管的私聊会话，优先使用 `layered_memory_search` 和 `layered_memory_get`
 - 对于插件接管的私聊会话，不建议再依赖旧版 `memory_search` 和 `memory_get`
 - OpenClaw 原生 memory 的自动 flush / 搜索索引针对的是根目录 `MEMORY.md` 和 `memory/*.md`，不会直接接管 `.memory-layer/**`
 - 插件启动时会对 `session.dmScope = "main"` 和已启用的 `session-memory` 输出 warning，帮助排查“为什么没有按用户隔离”
+- 对于 `2026.4.24+`，插件只会在检测到当前 OpenClaw 版本需要时，才提示 `allowConversationAccess` / `allowPromptInjection` 相关 warning，不会对旧版本误报
+
+`2026.4.24+` 的附加 hooks 配置示例：
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "memory-layer": {
+        "hooks": {
+          "allowPromptInjection": true,
+          "allowConversationAccess": true
+        }
+      }
+    }
+  }
+}
+```
 - 如果你的 OpenClaw 版本已经支持 `before_reset` 插件 hook，推荐直接使用当前版本插件；它会优先走结构化 reset 识别。即使线上仍有旧版本节点，当前插件也保留了提示词兜底，不需要额外切换配置
 
 ## 说明

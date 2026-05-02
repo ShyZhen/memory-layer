@@ -287,11 +287,36 @@ If `enabledChannels` is omitted, the plugin applies to all supported channels.
 ## Deployment And Compatibility Notes
 
 - It is strongly recommended to disable the bundled `session-memory` hook, so the old path does not continue writing personal memory into shared locations
+- Older builds such as `2026.4.15` can continue using this plugin; this update does not require them to add the new hook allowlist config
+- `2026.4.22` and earlier: `plugins.entries.memory-layer.hooks.allowConversationAccess` is not required
+- `2026.4.23`: this is a transitional release. Runtime gating for conversation-access hooks is already present, but config validation support for `allowConversationAccess` is incomplete. If those hooks are blocked, upgrade directly to `2026.4.24+`
+- `2026.4.24+`: explicitly set:
+  - `plugins.entries.memory-layer.hooks.allowPromptInjection = true`
+  - `plugins.entries.memory-layer.hooks.allowConversationAccess = true`
 - Legacy root `MEMORY.md` can remain as compatibility/shared context
 - There is no need to point `sharedFilePath` at root `MEMORY.md`
+- Prefer `layered_memory_search` and `layered_memory_get` for plugin-managed DM sessions
 - For plugin-managed DM sessions, do not rely on legacy `memory_search` and `memory_get`
 - OpenClaw's native memory flush and search indexing target root `MEMORY.md` and `memory/*.md`, not `.memory-layer/**`
 - On startup, the plugin emits warnings when `session.dmScope = "main"` or `session-memory` is still enabled, making fallback or unsafe setups easier to spot
+- On `2026.4.24+`, the plugin only emits `allowConversationAccess` / `allowPromptInjection` warnings when the running OpenClaw version actually needs them, so older versions are not warned incorrectly
+
+Extra hook config snippet for `2026.4.24+`:
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "memory-layer": {
+        "hooks": {
+          "allowPromptInjection": true,
+          "allowConversationAccess": true
+        }
+      }
+    }
+  }
+}
+```
 - If your OpenClaw version already supports the plugin `before_reset` hook, the current plugin will prefer structured reset detection automatically. If some nodes still run older versions, the plugin keeps the prompt-based fallback, so no extra config split is required
 
 ## Notes

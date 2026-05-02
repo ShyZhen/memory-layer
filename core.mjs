@@ -5,6 +5,10 @@ export const HISTORY_INJECTION_MODES = CONTEXT_INJECTION_MODES;
 export const DEFAULT_CONTEXT_TRACKING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const DEFAULT_CONTEXT_TRACKING_MAX_ENTRIES = 2048;
 
+const OPENCLAW_VERSION_ALLOW_PROMPT_INJECTION = [2026, 3, 7];
+const OPENCLAW_VERSION_ALLOW_CONVERSATION_ACCESS_RUNTIME = [2026, 4, 23];
+const OPENCLAW_VERSION_ALLOW_CONVERSATION_ACCESS_CONFIG = [2026, 4, 24];
+
 export function parseSessionKey(sessionKey) {
   if (!sessionKey.startsWith("agent:")) return null;
   const parts = sessionKey.split(":");
@@ -95,9 +99,11 @@ export function getRedirectedLegacyMemoryPath(workspaceDir, userMemoryFile, note
   return path.join(notesDir, safeRelativePath);
 }
 
-export function collectStartupWarnings(config) {
+export function collectStartupWarnings(config, runtimeVersion) {
   const warnings = [];
   const dmScope = readConfiguredDmScope(config);
+  const pluginHookPolicy = readPluginHookPolicy(config, "memory-layer");
+  const parsedRuntimeVersion = parseOpenClawVersion(runtimeVersion);
 
   if (dmScope === "main") {
     warnings.push(
@@ -109,6 +115,31 @@ export function collectStartupWarnings(config) {
     warnings.push(
       "hooks.internal.entries.session-memory is enabled. This can write personal memory back into legacy shared paths and undermine layered memory isolation.",
     );
+  }
+
+  if (
+    pluginHookPolicy?.allowPromptInjection === false
+    && isVersionAtLeast(parsedRuntimeVersion, OPENCLAW_VERSION_ALLOW_PROMPT_INJECTION)
+  ) {
+    warnings.push(
+      "plugins.entries.memory-layer.hooks.allowPromptInjection is false. This blocks before_prompt_build, so layered memory context cannot be injected.",
+    );
+  }
+
+  if (
+    pluginHookPolicy
+    && isVersionAtLeast(parsedRuntimeVersion, OPENCLAW_VERSION_ALLOW_CONVERSATION_ACCESS_RUNTIME)
+    && pluginHookPolicy.allowConversationAccess !== true
+  ) {
+    if (compareOpenClawVersions(parsedRuntimeVersion, OPENCLAW_VERSION_ALLOW_CONVERSATION_ACCESS_CONFIG) < 0) {
+      warnings.push(
+        "OpenClaw 2026.4.23 introduced conversation-access hook gating, but 2026.4.23 is a transitional release and may not accept plugins.entries.memory-layer.hooks.allowConversationAccess in config validation. Upgrade to 2026.4.24+ if layered memory conversation hooks are being blocked.",
+      );
+    } else {
+      warnings.push(
+        "OpenClaw 2026.4.24+ should set plugins.entries.memory-layer.hooks.allowConversationAccess = true. Without it, hooks that read conversation messages (for example message_received, message_sent, agent_end) may not behave correctly.",
+      );
+    }
   }
 
   return warnings;
@@ -213,7 +244,8 @@ export function buildSystemGuidance(hasLayeredContext, mode) {
     "The canonical shared-memory file is .memory-layer/shared/memory.md unless sharedFilePath explicitly overrides it.",
     "Do not use the deprecated .memory-layer/shared.md path.",
     "Do not rely on legacy workspace memory files under MEMORY.md or memory/YYYY-MM-DD.md as the source of truth for plugin-managed sessions.",
-    "Do not call legacy memory_search or memory_get for plugin-managed sessions. Use the layered memory context when it is present, or read the relevant .memory-layer files directly if absolutely necessary.",
+    "Prefer layered_memory_search and layered_memory_get for plugin-managed sessions.",
+    "Do not call legacy memory_search or memory_get for plugin-managed sessions. Use layered_memory_search / layered_memory_get when available, otherwise use the layered memory context or read the relevant .memory-layer files directly if absolutely necessary.",
     "Legacy shared MEMORY.md remains compatibility-only context; new personal memory belongs to the current user's layer.",
     "If the user explicitly says '记住：...' or 'remember: ...', that content is saved to personal memory.",
     "If the user explicitly says '共享记忆：...' or 'remember-shared: ...', that content is saved to shared memory.",
@@ -416,6 +448,7 @@ function shouldDropMemoryPromptLine(line, kind) {
     /^The canonical shared-memory file is /,
     /^Do not use the deprecated \.memory-layer\/shared\.md path\./,
     /^Do not rely on legacy workspace memory files under /,
+    /^Prefer layered_memory_search and layered_memory_get /,
     /^Do not call legacy memory_search or memory_get /,
     /^Legacy shared MEMORY\.md remains compatibility-only context; /,
     /^If the user explicitly says '记住：\.\.\.' or 'remember: \.\.\.', /,
@@ -464,6 +497,27 @@ function sanitizeSegment(value) {
   return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/\s+/g, "_").slice(0, 120) || "default";
 }
 
+function parseOpenClawVersion(value) {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(/^(\d+)\.(\d+)\.(\d+)(?:\D.*)?$/);
+  if (!match) return null;
+  return match.slice(1, 4).map((part) => Number(part));
+}
+
+function compareOpenClawVersions(left, right) {
+  if (!left) return -1;
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    if (leftValue !== rightValue) return leftValue - rightValue;
+  }
+  return 0;
+}
+
+function isVersionAtLeast(current, minimum) {
+  return compareOpenClawVersions(current, minimum) >= 0;
+}
+
 function readConfiguredDmScope(config) {
   if (!isRecord(config)) return undefined;
   const session = isRecord(config.session) ? config.session : null;
@@ -482,6 +536,25 @@ function isSessionMemoryHookEnabled(config) {
   if (sessionMemory?.enabled === false) return false;
 
   return true;
+}
+
+function readPluginHookPolicy(config, pluginId) {
+  if (!isRecord(config)) return undefined;
+  const plugins = isRecord(config.plugins) ? config.plugins : null;
+  const entries = isRecord(plugins?.entries) ? plugins.entries : null;
+  const pluginEntry = isRecord(entries?.[pluginId]) ? entries[pluginId] : null;
+  if (!pluginEntry) return undefined;
+  const hooks = isRecord(pluginEntry?.hooks) ? pluginEntry.hooks : null;
+  if (!hooks) return {};
+
+  return {
+    allowPromptInjection: typeof hooks.allowPromptInjection === "boolean"
+      ? hooks.allowPromptInjection
+      : undefined,
+    allowConversationAccess: typeof hooks.allowConversationAccess === "boolean"
+      ? hooks.allowConversationAccess
+      : undefined,
+  };
 }
 
 function isRecord(value) {
